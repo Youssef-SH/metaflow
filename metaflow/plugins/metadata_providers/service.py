@@ -485,6 +485,12 @@ class ServiceMetadataProvider(MetadataProvider):
                 % (supported_methods, method)
             )
         url = os.path.join(cls.INFO, path.lstrip("/"))
+
+        # global monotonic counter
+        cls._counter = getattr(cls, "_counter", 0) + 1
+        req_id = cls._counter
+
+        print(f"[REQ #{req_id}] {method} {url}")
         for i in range(SERVICE_RETRY_COUNT):
             try:
                 if method == "GET":
@@ -528,8 +534,13 @@ class ServiceMetadataProvider(MetadataProvider):
                 resp = None
             else:
                 if return_raw_resp:
+                    content_len = len(resp.content or b"")
+                    print(f"[MF-SERVICE #{req_id}] {method} {url} -> {content_len} bytes (raw) status={resp.status_code}")
                     return resp, True
+
                 if resp.status_code < 300:
+                    content_len = len(resp.content or b"")
+                    print(f"[MF-SERVICE #{req_id}] {method} {url} -> {content_len} bytes status={resp.status_code}")
                     return resp.json(), True
                 elif resp.status_code == 409 and data is not None:
                     # a special case: the post fails due to a conflict
@@ -546,6 +557,11 @@ class ServiceMetadataProvider(MetadataProvider):
                     else:
                         return None, False
                 elif resp.status_code != 503:
+                    content_len = len(resp.content or b"")
+                    print(
+                        f"[MF-SERVICE #{req_id}] {method} {url} -> "
+                        f"{content_len} bytes status={resp.status_code} ERROR"
+                    )
                     raise ServiceException(
                         "Metadata request (%s) failed (code %s): %s"
                         % (path, resp.status_code, resp.text),
