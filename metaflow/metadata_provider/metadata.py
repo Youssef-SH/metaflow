@@ -3,6 +3,7 @@ import os
 import re
 import time
 from collections import namedtuple
+from contextvars import ContextVar
 from itertools import chain
 
 from typing import List
@@ -15,6 +16,7 @@ DataArtifact = namedtuple("DataArtifact", "name ds_type ds_root url type sha")
 MetaDatum = namedtuple("MetaDatum", "field value type tags")
 
 attempt_id_re = re.compile(r"attempt_id:([0-9]+)")
+active_tracer = ContextVar("active_metadata_tracer", default=None)
 
 
 class MetadataProviderMeta(type):
@@ -428,6 +430,12 @@ class MetadataProvider(object):
                 raise ValueError("Attempt can only be a positive integer")
         else:
             attempt_int = None
+
+        # ContextVar avoids global mutable state across concurrent contexts
+        tracer = active_tracer.get()
+        if tracer is not None:
+            # Trace only valid semantic queries after validation succeeds
+            tracer._record(cls.TYPE, obj_type, sub_type, type_order, attempt_int, args)
 
         pre_filter = cls._get_object_internal(
             obj_type, type_order, sub_type, sub_order, filters, attempt_int, *args
